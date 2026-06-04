@@ -1,0 +1,937 @@
+логины: admin/admin123, manager/manager123, client/client123
+1.
+ВАЖНО: Установка NuGet пакета
+В Visual Studio откройте Tools → NuGet Package Manager → Package Manager Console и выполните:
+text
+
+УСТАНОВИТЬ ПАКЕТ В VISUAL STUDIO
+Правой кнопкой на проекте → Manage NuGet Packages
+
+Вкладка Browse → поиск: System.Data.SqlClient
+
+Нажать Install
+
+<Window x:Class="WpfApp2.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WpfApp2"
+        mc:Ignorable="d"
+        Title="Система управления продажами мебели" Height="450" Width="800"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Заголовок -->
+        <Border Grid.Row="0" Background="#2E86AB" Padding="15">
+            <TextBlock Text="Вход в систему" 
+                       FontSize="24" 
+                       FontWeight="Bold" 
+                       Foreground="White"
+                       HorizontalAlignment="Center"/>
+        </Border>
+
+        <!-- Форма входа -->
+        <StackPanel Grid.Row="1" 
+                    VerticalAlignment="Center" 
+                    HorizontalAlignment="Center" 
+                    Width="350">
+            
+            <Border Background="#F5F5F5" 
+                    Padding="30" 
+                    CornerRadius="10" 
+                    BorderBrush="#DDD" 
+                    BorderThickness="1">
+                <StackPanel>
+                    <!-- Логин -->
+                    <TextBlock Text="Логин:" 
+                               FontSize="14" 
+                               FontWeight="SemiBold" 
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="txtLogin" 
+                             Height="35" 
+                             FontSize="14" 
+                             Padding="5"
+                             Margin="0,0,0,15"/>
+
+                    <!-- Пароль -->
+                    <TextBlock Text="Пароль:" 
+                               FontSize="14" 
+                               FontWeight="SemiBold" 
+                               Margin="0,0,0,5"/>
+                    <PasswordBox x:Name="txtPassword" 
+                                 Height="35" 
+                                 FontSize="14" 
+                                 Padding="5"
+                                 Margin="0,0,0,20"/>
+
+                    <!-- Кнопки -->
+                    <Button x:Name="btnLogin" 
+                            Content="Войти" 
+                            Height="40" 
+                            FontSize="14" 
+                            FontWeight="Bold"
+                            Background="#2E86AB" 
+                            Foreground="White"
+                            BorderThickness="0"
+                            Margin="0,0,0,10"
+                            Click="btnLogin_Click"/>
+
+                    <Button x:Name="btnGuest" 
+                            Content="Войти как гость" 
+                            Height="40" 
+                            FontSize="14"
+                            Background="#A23B72" 
+                            Foreground="White"
+                            BorderThickness="0"
+                            Click="btnGuest_Click"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Сообщение об ошибке -->
+            <TextBlock x:Name="txtError" 
+                       Foreground="Red" 
+                       FontSize="12" 
+                       TextAlignment="Center" 
+                       Margin="0,10,0,0"
+                       Visibility="Collapsed"/>
+        </StackPanel>
+
+        <!-- Статусная строка -->
+        <Border Grid.Row="2" 
+                Background="#333" 
+                Padding="10">
+            <TextBlock Text="© 2024 Мебельная компания. Все права защищены." 
+                       Foreground="White" 
+                       FontSize="12"
+                       HorizontalAlignment="Center"/>
+        </Border>
+    </Grid>
+</Window>
+
+
+
+
+2.MainWindow.xaml.cs
+
+using System;
+using System.Configuration;
+using System.Data;
+using System.Data.SqlClient;
+using System.Windows;
+
+namespace WpfApp2
+{
+    public partial class MainWindow : Window
+    {
+        // Статическое свойство для хранения текущего пользователя
+        public static User CurrentUser { get; private set; }
+
+        public MainWindow()
+        {
+            InitializeComponent();
+        }
+
+        private void btnLogin_Click(object sender, RoutedEventArgs e)
+        {
+            string login = txtLogin.Text.Trim();
+            string password = txtPassword.Password.Trim();
+
+            if (string.IsNullOrEmpty(login) || string.IsNullOrEmpty(password))
+            {
+                ShowError("Пожалуйста, введите логин и пароль.");
+                return;
+            }
+
+            try
+            {
+                CurrentUser = AuthenticateUser(login, password);
+
+                if (CurrentUser != null)
+                {
+                    // Успешный вход - открываем главное меню
+                    MainMenuWindow mainMenu = new MainMenuWindow();
+                    mainMenu.Show();
+                    this.Close();
+                }
+                else
+                {
+                    ShowError("Неверный логин или пароль.");
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowError($"Ошибка подключения к базе данных: {ex.Message}");
+            }
+        }
+
+        private void btnGuest_Click(object sender, RoutedEventArgs e)
+        {
+            // Вход как гость
+            CurrentUser = null;
+            ProductViewWindow productView = new ProductViewWindow(false);
+            productView.Show();
+            this.Close();
+        }
+
+        private User AuthenticateUser(string login, string password)
+        {
+            string connectionString = ConfigurationManager.ConnectionStrings["FurnitureDB"].ConnectionString;
+            string query = @"SELECT u.UserID, u.Login, u.FullName, u.RoleID, r.RoleName 
+                           FROM Users u 
+                           INNER JOIN Roles r ON u.RoleID = r.RoleID 
+                           WHERE u.Login = @Login AND u.Password = @Password";
+
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                SqlCommand command = new SqlCommand(query, connection);
+                command.Parameters.AddWithValue("@Login", login);
+                command.Parameters.AddWithValue("@Password", password);
+
+                connection.Open();
+                SqlDataReader reader = command.ExecuteReader();
+
+                if (reader.Read())
+                {
+                    return new User
+                    {
+                        UserID = Convert.ToInt32(reader["UserID"]),
+                        Login = reader["Login"].ToString(),
+                        FullName = reader["FullName"].ToString(),
+                        RoleID = Convert.ToInt32(reader["RoleID"]),
+                        RoleName = reader["RoleName"].ToString()
+                    };
+                }
+            }
+            return null;
+        }
+
+        private void ShowError(string message)
+        {
+            txtError.Text = message;
+            txtError.Visibility = Visibility.Visible;
+        }
+    }
+
+    // Класс пользователя
+    public class User
+    {
+        public int UserID { get; set; }
+        public string Login { get; set; }
+        public string FullName { get; set; }
+        public int RoleID { get; set; }
+        public string RoleName { get; set; }
+    }
+}
+
+
+
+
+
+
+3.MainMenuWindow.xaml.cs
+
+using System.Windows;
+
+namespace WpfApp2
+{
+    public partial class MainMenuWindow : Window
+    {
+        public MainMenuWindow()
+        {
+            InitializeComponent();
+            SetupAccessRights();
+            
+            if (MainWindow.CurrentUser != null)
+            {
+                lblWelcome.Text = $"Добро пожаловать, {MainWindow.CurrentUser.FullName}!";
+                lblRole.Text = $"Роль: {MainWindow.CurrentUser.RoleName}";
+            }
+        }
+
+        private void SetupAccessRights()
+        {
+            if (MainWindow.CurrentUser == null) return;
+
+            string role = MainWindow.CurrentUser.RoleName;
+
+            // Базовые права для всех
+            btnViewProducts.IsEnabled = true;
+
+            // Права менеджера и администратора
+            if (role == "Manager" || role == "Administrator")
+            {
+                btnFilteredProducts.IsEnabled = true;
+                btnViewOrders.IsEnabled = true;
+            }
+            else
+            {
+                btnFilteredProducts.IsEnabled = false;
+                btnViewOrders.IsEnabled = false;
+            }
+
+            // Права только администратора
+            btnManageProducts.IsEnabled = (role == "Administrator");
+        }
+
+        private void btnViewProducts_Click(object sender, RoutedEventArgs e)
+        {
+            ProductViewWindow productView = new ProductViewWindow(false);
+            productView.ShowDialog();
+        }
+
+        private void btnFilteredProducts_Click(object sender, RoutedEventArgs e)
+        {
+            ProductViewWindow productView = new ProductViewWindow(true);
+            productView.ShowDialog();
+        }
+
+        private void btnManageProducts_Click(object sender, RoutedEventArgs e)
+        {
+            ProductManagementWindow management = new ProductManagementWindow();
+            management.ShowDialog();
+        }
+
+        private void btnViewOrders_Click(object sender, RoutedEventArgs e)
+        {
+            OrderViewWindow orderView = new OrderViewWindow();
+            orderView.ShowDialog();
+        }
+
+        private void btnLogout_Click(object sender, RoutedEventArgs e)
+        {
+            MainWindow.CurrentUser = null;
+            MainWindow loginWindow = new MainWindow();
+            loginWindow.Show();
+            this.Close();
+        }
+    }
+}
+
+
+
+
+
+4.DatabaseHelper.cs
+
+using System;
+using System.Configuration;
+using System.Data;
+using System.Data.SqlClient;
+
+namespace WpfApp2
+{
+    public class DatabaseHelper
+    {
+        private string connectionString;
+
+        public DatabaseHelper()
+        {
+            connectionString = ConfigurationManager.ConnectionStrings["FurnitureDB"].ConnectionString;
+        }
+
+        public DataTable GetAllProducts()
+        {
+            string query = @"SELECT p.ProductID, p.ProductName, p.Description, p.Price, 
+                           c.CategoryName, s.SupplierName, p.StockQuantity,
+                           p.CategoryID, p.SupplierID
+                           FROM Products p
+                           LEFT JOIN Categories c ON p.CategoryID = c.CategoryID
+                           LEFT JOIN Suppliers s ON p.SupplierID = s.SupplierID";
+
+            return ExecuteQuery(query);
+        }
+
+        public DataTable GetFilteredProducts(string searchText, string category, string sortBy)
+        {
+            string query = @"SELECT p.ProductID, p.ProductName, p.Description, p.Price, 
+                           c.CategoryName, s.SupplierName, p.StockQuantity
+                           FROM Products p
+                           LEFT JOIN Categories c ON p.CategoryID = c.CategoryID
+                           LEFT JOIN Suppliers s ON p.SupplierID = s.SupplierID
+                           WHERE 1=1";
+
+            SqlCommand command = new SqlCommand();
+
+            if (!string.IsNullOrEmpty(searchText))
+            {
+                query += " AND (p.ProductName LIKE @SearchText OR p.Description LIKE @SearchText)";
+                command.Parameters.AddWithValue("@SearchText", "%" + searchText + "%");
+            }
+
+            if (!string.IsNullOrEmpty(category) && category != "Все категории")
+            {
+                query += " AND c.CategoryName = @Category";
+                command.Parameters.AddWithValue("@Category", category);
+            }
+
+            switch (sortBy)
+            {
+                case "По названию":
+                    query += " ORDER BY p.ProductName";
+                    break;
+                case "По цене (возрастание)":
+                    query += " ORDER BY p.Price ASC";
+                    break;
+                case "По цене (убывание)":
+                    query += " ORDER BY p.Price DESC";
+                    break;
+                case "По остатку":
+                    query += " ORDER BY p.StockQuantity DESC";
+                    break;
+                default:
+                    query += " ORDER BY p.ProductID";
+                    break;
+            }
+
+            command.CommandText = query;
+            return ExecuteCommand(command);
+        }
+
+        public DataTable GetCategories()
+        {
+            string query = "SELECT * FROM Categories ORDER BY CategoryName";
+            return ExecuteQuery(query);
+        }
+
+        public DataTable GetSuppliers()
+        {
+            string query = "SELECT * FROM Suppliers ORDER BY SupplierName";
+            return ExecuteQuery(query);
+        }
+
+        public bool AddProduct(string name, string description, decimal price, 
+                               int categoryId, int supplierId, int stock)
+        {
+            string query = @"INSERT INTO Products (ProductName, Description, Price, 
+                           CategoryID, SupplierID, StockQuantity) 
+                           VALUES (@Name, @Description, @Price, @CategoryID, 
+                                   @SupplierID, @StockQuantity)";
+
+            SqlCommand command = new SqlCommand(query);
+            command.Parameters.AddWithValue("@Name", name);
+            command.Parameters.AddWithValue("@Description", description);
+            command.Parameters.AddWithValue("@Price", price);
+            command.Parameters.AddWithValue("@CategoryID", categoryId);
+            command.Parameters.AddWithValue("@SupplierID", supplierId);
+            command.Parameters.AddWithValue("@StockQuantity", stock);
+
+            return ExecuteNonQuery(command) > 0;
+        }
+
+        public bool UpdateProduct(int productId, string name, string description, 
+                                  decimal price, int categoryId, int supplierId, int stock)
+        {
+            string query = @"UPDATE Products 
+                           SET ProductName = @Name, Description = @Description, 
+                               Price = @Price, CategoryID = @CategoryID, 
+                               SupplierID = @SupplierID, StockQuantity = @StockQuantity
+                           WHERE ProductID = @ProductID";
+
+            SqlCommand command = new SqlCommand(query);
+            command.Parameters.AddWithValue("@ProductID", productId);
+            command.Parameters.AddWithValue("@Name", name);
+            command.Parameters.AddWithValue("@Description", description);
+            command.Parameters.AddWithValue("@Price", price);
+            command.Parameters.AddWithValue("@CategoryID", categoryId);
+            command.Parameters.AddWithValue("@SupplierID", supplierId);
+            command.Parameters.AddWithValue("@StockQuantity", stock);
+
+            return ExecuteNonQuery(command) > 0;
+        }
+
+        public bool DeleteProduct(int productId)
+        {
+            string query = "DELETE FROM Products WHERE ProductID = @ProductID";
+            SqlCommand command = new SqlCommand(query);
+            command.Parameters.AddWithValue("@ProductID", productId);
+
+            return ExecuteNonQuery(command) > 0;
+        }
+
+        public DataTable GetOrders(string statusFilter = null)
+        {
+            string query = @"SELECT o.OrderID, u.FullName as CustomerName, o.OrderDate, 
+                           o.TotalAmount, os.StatusName
+                           FROM Orders o
+                           INNER JOIN Users u ON o.UserID = u.UserID
+                           INNER JOIN OrderStatuses os ON o.StatusID = os.StatusID";
+
+            SqlCommand command = new SqlCommand();
+
+            if (!string.IsNullOrEmpty(statusFilter) && statusFilter != "Все статусы")
+            {
+                query += " WHERE os.StatusName = @Status";
+                command.Parameters.AddWithValue("@Status", statusFilter);
+            }
+
+            query += " ORDER BY o.OrderDate DESC";
+            command.CommandText = query;
+
+            return ExecuteCommand(command);
+        }
+
+        public DataTable GetOrderStatuses()
+        {
+            string query = "SELECT * FROM OrderStatuses ORDER BY StatusName";
+            return ExecuteQuery(query);
+        }
+
+        private DataTable ExecuteQuery(string query)
+        {
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                SqlDataAdapter adapter = new SqlDataAdapter(query, connection);
+                DataTable table = new DataTable();
+                adapter.Fill(table);
+                return table;
+            }
+        }
+
+        private DataTable ExecuteCommand(SqlCommand command)
+        {
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                command.Connection = connection;
+                SqlDataAdapter adapter = new SqlDataAdapter(command);
+                DataTable table = new DataTable();
+                adapter.Fill(table);
+                return table;
+            }
+        }
+
+        private int ExecuteNonQuery(SqlCommand command)
+        {
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                command.Connection = connection;
+                connection.Open();
+                return command.ExecuteNonQuery();
+            }
+        }
+    }
+}
+
+
+5.ProductViewWindow.xaml
+
+<Window x:Class="WpfApp2.ProductViewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Каталог товаров" Height="500" Width="900"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#2E86AB" Padding="10">
+            <TextBlock Text="КАТАЛОГ ТОВАРОВ" 
+                       FontSize="18" FontWeight="Bold" 
+                       Foreground="White" HorizontalAlignment="Center"/>
+        </Border>
+
+        <Border Grid.Row="1" Background="#F0F0F0" Padding="10" 
+                x:Name="panelFilters" Visibility="Collapsed">
+            <StackPanel>
+                <WrapPanel Margin="0,0,0,5">
+                    <TextBlock Text="Поиск:" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
+                    <TextBox x:Name="txtSearch" Width="200" Height="25" Margin="0,0,10,0"/>
+                    
+                    <TextBlock Text="Категория:" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
+                    <ComboBox x:Name="cmbCategory" Width="150" Height="25" Margin="0,0,10,0"/>
+                    
+                    <TextBlock Text="Сортировка:" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
+                    <ComboBox x:Name="cmbSortBy" Width="150" Height="25" Margin="0,0,10,0"/>
+                    
+                    <Button x:Name="btnSearch" Content="🔍 Применить" 
+                            Width="100" Height="25" Background="#F18F01" 
+                            Foreground="White" FontWeight="Bold"
+                            Click="btnSearch_Click"/>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
+        <DataGrid Grid.Row="2" x:Name="dgvProducts" 
+                  AutoGenerateColumns="True"
+                  IsReadOnly="True"
+                  Margin="10"
+                  SelectionMode="Single"/>
+
+        <Button Grid.Row="3" Content="Закрыть" 
+                Width="100" Height="30" Margin="10"
+                Background="#333" Foreground="White"
+                FontWeight="Bold"
+                Click="btnClose_Click"/>
+    </Grid>
+</Window>
+
+
+
+6.ProductViewwWindow.xaml.cs
+
+using System.Data;
+using System.Windows;
+
+namespace WpfApp2
+{
+    public partial class ProductViewWindow : Window
+    {
+        private DatabaseHelper dbHelper;
+        private bool showFilters;
+
+        public ProductViewWindow(bool showFilters)
+        {
+            InitializeComponent();
+            dbHelper = new DatabaseHelper();
+            this.showFilters = showFilters;
+
+            if (showFilters)
+            {
+                panelFilters.Visibility = Visibility.Visible;
+                LoadFilters();
+            }
+
+            LoadProducts();
+        }
+
+        private void LoadFilters()
+        {
+            DataTable categories = dbHelper.GetCategories();
+            cmbCategory.Items.Clear();
+            cmbCategory.Items.Add("Все категории");
+            foreach (DataRow row in categories.Rows)
+            {
+                cmbCategory.Items.Add(row["CategoryName"].ToString());
+            }
+            cmbCategory.SelectedIndex = 0;
+
+            cmbSortBy.Items.Clear();
+            cmbSortBy.Items.Add("По умолчанию");
+            cmbSortBy.Items.Add("По названию");
+            cmbSortBy.Items.Add("По цене (возрастание)");
+            cmbSortBy.Items.Add("По цене (убывание)");
+            cmbSortBy.Items.Add("По остатку");
+            cmbSortBy.SelectedIndex = 0;
+        }
+
+        private void LoadProducts()
+        {
+            DataTable products;
+
+            if (showFilters)
+            {
+                string search = txtSearch.Text.Trim();
+                string category = cmbCategory.SelectedItem?.ToString();
+                string sortBy = cmbSortBy.SelectedItem?.ToString();
+                products = dbHelper.GetFilteredProducts(search, category, sortBy);
+            }
+            else
+            {
+                products = dbHelper.GetAllProducts();
+            }
+
+            dgvProducts.ItemsSource = products.DefaultView;
+        }
+
+        private void btnSearch_Click(object sender, RoutedEventArgs e)
+        {
+            LoadProducts();
+        }
+
+        private void btnClose_Click(object sender, RoutedEventArgs e)
+        {
+            this.Close();
+        }
+    }
+}
+
+
+ 7.ProductManagementWindow.xaml
+
+<Window x:Class="WpfApp2.ProductManagementWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Управление товарами" Height="600" Width="1000"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="300"/>
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="0" Margin="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="Список товаров" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+            <DataGrid Grid.Row="1" x:Name="dgvProducts" 
+                      AutoGenerateColumns="True"
+                      IsReadOnly="True"
+                      SelectionMode="Single"
+                      SelectionChanged="dgvProducts_SelectionChanged"/>
+        </Grid>
+
+        <Border Grid.Column="1" Background="#F5F5F5" Margin="10" Padding="15" CornerRadius="5">
+            <StackPanel>
+                <TextBlock Text="Детали товара" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/>
+
+                <TextBlock Text="ID:" FontWeight="Bold"/>
+                <TextBox x:Name="txtProductID" IsReadOnly="True" Height="25" Margin="0,0,0,10"/>
+
+                <TextBlock Text="Название:" FontWeight="Bold"/>
+                <TextBox x:Name="txtProductName" Height="25" Margin="0,0,0,10"/>
+
+                <TextBlock Text="Описание:" FontWeight="Bold"/>
+                <TextBox x:Name="txtDescription" Height="60" TextWrapping="Wrap" 
+                         AcceptsReturn="True" Margin="0,0,0,10"/>
+
+                <TextBlock Text="Цена:" FontWeight="Bold"/>
+                <TextBox x:Name="txtPrice" Height="25" Margin="0,0,0,10"/>
+
+                <TextBlock Text="Категория:" FontWeight="Bold"/>
+                <ComboBox x:Name="cmbCategory" Height="25" Margin="0,0,0,10"/>
+
+                <TextBlock Text="Поставщик:" FontWeight="Bold"/>
+                <ComboBox x:Name="cmbSupplier" Height="25" Margin="0,0,0,10"/>
+
+                <TextBlock Text="Остаток на складе:" FontWeight="Bold"/>
+                <TextBox x:Name="txtStock" Height="25" Margin="0,0,0,15"/>
+
+                <Button Content="Добавить" Height="35" Background="#4CAF50" 
+                        Foreground="White" FontWeight="Bold" Margin="0,0,0,5"
+                        Click="btnAdd_Click"/>
+
+                <Button Content="Обновить" Height="35" Background="#2196F3" 
+                        Foreground="White" FontWeight="Bold" Margin="0,0,0,5"
+                        Click="btnUpdate_Click"/>
+
+                <Button Content="Удалить" Height="35" Background="#F44336" 
+                        Foreground="White" FontWeight="Bold" Margin="0,0,0,5"
+                        Click="btnDelete_Click"/>
+
+                <Button Content="Очистить поля" Height="35" Background="#607D8B" 
+                        Foreground="White" FontWeight="Bold" Margin="0,0,0,5"
+                        Click="btnClear_Click"/>
+
+                <Button Content="Закрыть" Height="35" Background="#333" 
+                        Foreground="White" FontWeight="Bold"
+                        Click="btnClose_Click"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
+
+
+
+
+
+8.OrderViewWindow.xaml
+
+<Window x:Class="WpfApp2.OrderViewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Управление заказами" Height="500" Width="800"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#A23B72" Padding="10">
+            <TextBlock Text="ЗАКАЗЫ" FontSize="18" FontWeight="Bold" 
+                       Foreground="White" HorizontalAlignment="Center"/>
+        </Border>
+
+        <Border Grid.Row="1" Background="#F0F0F0" Padding="10">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Фильтр по статусу:" VerticalAlignment="Center" 
+                           Margin="0,0,10,0" FontWeight="Bold"/>
+                <ComboBox x:Name="cmbStatusFilter" Width="200" Height="25"
+                          SelectionChanged="cmbStatusFilter_SelectionChanged"/>
+            </StackPanel>
+        </Border>
+
+        <DataGrid Grid.Row="2" x:Name="dgvOrders" 
+                  AutoGenerateColumns="True"
+                  IsReadOnly="True"
+                  Margin="10"
+                  SelectionMode="Single"/>
+
+        <Button Grid.Row="3" Content="Закрыть" 
+                Width="100" Height="30" Margin="10"
+                Background="#333" Foreground="White"
+                FontWeight="Bold"
+                Click="btnClose_Click"/>
+    </Grid>
+</Window>
+
+9.OrderViewwWindow.xaml.cs
+
+using System.Data;
+using System.Windows;
+
+namespace WpfApp2
+{
+    public partial class OrderViewWindow : Window
+    {
+        private DatabaseHelper dbHelper;
+
+        public OrderViewWindow()
+        {
+            InitializeComponent();
+            dbHelper = new DatabaseHelper();
+            LoadStatusFilter();
+            LoadOrders();
+        }
+
+        private void LoadStatusFilter()
+        {
+            DataTable statuses = dbHelper.GetOrderStatuses();
+            cmbStatusFilter.Items.Clear();
+            cmbStatusFilter.Items.Add("Все статусы");
+            foreach (DataRow row in statuses.Rows)
+            {
+                cmbStatusFilter.Items.Add(row["StatusName"].ToString());
+            }
+            cmbStatusFilter.SelectedIndex = 0;
+        }
+
+        private void LoadOrders()
+        {
+            string statusFilter = cmbStatusFilter.SelectedItem?.ToString();
+            dgvOrders.ItemsSource = dbHelper.GetOrders(statusFilter).DefaultView;
+        }
+
+        private void cmbStatusFilter_SelectionChanged(object sender, 
+            System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            LoadOrders();
+        }
+
+        private void btnClose_Click(object sender, RoutedEventArgs e)
+        {
+            this.Close();
+        }
+    }
+}
+
+-- Create Database
+CREATE DATABASE FurnitureCompany;
+GO
+
+USE FurnitureCompany;
+GO
+
+-- Create Tables
+CREATE TABLE Roles (
+    RoleID INT PRIMARY KEY IDENTITY(1,1),
+    RoleName NVARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE Users (
+    UserID INT PRIMARY KEY IDENTITY(1,1),
+    Login NVARCHAR(50) NOT NULL UNIQUE,
+    Password NVARCHAR(255) NOT NULL,
+    FullName NVARCHAR(100) NOT NULL,
+    RoleID INT NOT NULL,
+    FOREIGN KEY (RoleID) REFERENCES Roles(RoleID)
+);
+
+CREATE TABLE Categories (
+    CategoryID INT PRIMARY KEY IDENTITY(1,1),
+    CategoryName NVARCHAR(100) NOT NULL UNIQUE
+);
+
+CREATE TABLE Suppliers (
+    SupplierID INT PRIMARY KEY IDENTITY(1,1),
+    SupplierName NVARCHAR(100) NOT NULL,
+    ContactPhone NVARCHAR(20),
+    Email NVARCHAR(100)
+);
+
+CREATE TABLE Products (
+    ProductID INT PRIMARY KEY IDENTITY(1,1),
+    ProductName NVARCHAR(200) NOT NULL,
+    Description NVARCHAR(MAX),
+    Price DECIMAL(10, 2) NOT NULL,
+    CategoryID INT NOT NULL,
+    SupplierID INT,
+    StockQuantity INT NOT NULL DEFAULT 0,
+    FOREIGN KEY (CategoryID) REFERENCES Categories(CategoryID),
+    FOREIGN KEY (SupplierID) REFERENCES Suppliers(SupplierID)
+);
+
+CREATE TABLE OrderStatuses (
+    StatusID INT PRIMARY KEY IDENTITY(1,1),
+    StatusName NVARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE Orders (
+    OrderID INT PRIMARY KEY IDENTITY(1,1),
+    UserID INT NOT NULL,
+    OrderDate DATETIME NOT NULL DEFAULT GETDATE(),
+    TotalAmount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    StatusID INT NOT NULL DEFAULT 1,
+    FOREIGN KEY (UserID) REFERENCES Users(UserID),
+    FOREIGN KEY (StatusID) REFERENCES OrderStatuses(StatusID)
+);
+
+CREATE TABLE OrderItems (
+    OrderItemID INT PRIMARY KEY IDENTITY(1,1),
+    OrderID INT NOT NULL,
+    ProductID INT NOT NULL,
+    Quantity INT NOT NULL,
+    Price DECIMAL(10, 2) NOT NULL,
+    FOREIGN KEY (OrderID) REFERENCES Orders(OrderID) ON DELETE CASCADE,
+    FOREIGN KEY (ProductID) REFERENCES Products(ProductID)
+);
+
+-- Insert Default Data
+INSERT INTO Roles (RoleName) VALUES ('Client'), ('Manager'), ('Administrator');
+
+INSERT INTO OrderStatuses (StatusName) VALUES 
+('New'), ('Processing'), ('Shipped'), ('Delivered'), ('Cancelled');
+
+INSERT INTO Users (Login, Password, FullName, RoleID) VALUES
+('admin', 'admin123', 'System Administrator', 3),
+('manager', 'manager123', 'Sales Manager', 2),
+('client', 'client123', 'Test Client', 1);
+
+INSERT INTO Categories (CategoryName) VALUES 
+('Living Room'), ('Bedroom'), ('Kitchen'), ('Office'), ('Outdoor');
+
+INSERT INTO Suppliers (SupplierName, ContactPhone, Email) VALUES
+('WoodMaster Ltd', '+1234567890', 'info@woodmaster.com'),
+('Modern Furniture Co', '+0987654321', 'sales@modernfurniture.com');
+
+INSERT INTO Products (ProductName, Description, Price, CategoryID, SupplierID, StockQuantity) VALUES
+('Sofa Classic', 'Comfortable 3-seater sofa', 899.99, 1, 1, 15),
+('Coffee Table', 'Modern glass coffee table', 249.99, 1, 2, 25),
+('Queen Bed', 'Queen size bed with storage', 1299.99, 2, 1, 10),
+('Office Chair', 'Ergonomic office chair', 349.99, 4, 2, 30),
+('Dining Table', '6-seater wooden dining table', 699.99, 3, 1, 8);
+
+ВАЖНО: Установка NuGet пакета
+В Visual Studio откройте Tools → NuGet Package Manager → Package Manager Console и выполните:
+text
+
+УСТАНОВИТЬ ПАКЕТ В VISUAL STUDIO
+Правой кнопкой на проекте → Manage NuGet Packages
+
+Вкладка Browse → поиск: System.Data.SqlClient
+
+Нажать Install
